@@ -1,43 +1,32 @@
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import { v4 as uuid } from "uuid";
 
-const DB_PATH = path.join(__dirname, "db.json");
+const USERS_FILE = "./users.json";
 
-/* ===== загрузка базы ===== */
-function loadDB() {
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ users: {}, messages: [] }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+function readUsers() {
+  return JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
 }
 
-/* ===== сохранение базы ===== */
-function saveDB(db) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+function writeUsers(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
 }
 
-/* ===== регистрация ===== */
-function register(nick) {
-  const db = loadDB();
+export function createUser(tgUser) {
+  const users = readUsers();
 
-  const token = Math.random().toString(36).slice(2);
-  const id = Date.now().toString();
+  const token = uuid();
+  users[token] = {
+    id: tgUser.id,
+    username: tgUser.username || "",
+    first_name: tgUser.first_name || "",
+    created: Date.now()
+  };
 
-  db.users[token] = { id, nick };
-  saveDB(db);
-
-  return { token, id, nick };
+  writeUsers(users);
+  return token;
 }
 
-/* ===== проверка токена ===== */
-function auth(token) {
-  const db = loadDB();
-  return db.users[token] || null;
+export function checkToken(token) {
+  const users = readUsers();
+  return users[token] || null;
 }
-
-module.exports = {
-  register,
-  auth,
-  loadDB,
-  saveDB
-};
