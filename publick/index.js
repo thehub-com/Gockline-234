@@ -1,38 +1,96 @@
-import express from "express";
-import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
+const API = location.origin;
+const WS  = API.replace("http", "ws");
 
-import { checkToken } from "./auth.js";
-import "./bot.js";
+let socket = null;
+let myNick = null;
+let current = null;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/* 🔐 LOGIN */
+async function login() {
+  const code = document.getElementById("code").value.trim();
+  if (!code) return alert("Введите код");
 
-const app = express();
+  const r = await fetch(API + "/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code })
+  });
 
-app.use(cors());
-app.use(express.json());
+  if (!r.ok) return alert("Неверный код");
 
-// 🔥 раздаём frontend
-app.use(express.static(path.join(__dirname, "../public")));
+  const data = await r.json();
+  myNick = data.nick;
 
-app.post("/login", (req, res) => {
-  const { code } = req.body; // ← ВАЖНО
-  if (!code) return res.sendStatus(400);
+  document.getElementById("auth").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("me").innerText = myNick;
 
-  const user = checkToken(code);
-  if (!user) return res.sendStatus(401);
+  socket = new WebSocket(WS);
+  socket.onmessage = e => handle(JSON.parse(e.data));
+}
 
-  res.json({ nick: user.nick });
-});
+/* 👥 USERS (пока заглушка, сервер позже) */
+function loadUsers() {
+  const box = document.getElementById("users");
+  box.innerHTML = "";
 
-// fallback для SPA
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
-});
+  ["admin", "test", "demo"].forEach(u => {
+    if (u === myNick) return;
+    const d = document.createElement("div");
+    d.className = "user";
+    d.innerText = u;
+    d.onclick = () => openChat(u);
+    box.appendChild(d);
+  });
+}
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log("GockLine server running on", PORT);
-});
+/* 💬 CHAT */
+function openChat(nick) {
+  current = nick;
+  document.getElementById("chatName").innerText = nick;
+  document.getElementById("chat").classList.remove("hidden");
+  document.getElementById("messages").innerHTML = "";
+}
+
+function closeChat() {
+  document.getElementById("chat").classList.add("hidden");
+}
+
+/* ✉️ SEND */
+function send() {
+  const t = document.getElementById("text");
+  if (!t.value || !current) return;
+
+  socket.send(JSON.stringify({
+    type: "msg",
+    to: current,
+    text: t.value,
+    time: Date.now()
+  }));
+
+  renderMsg({ text: t.value, me: true });
+  t.value = "";
+}
+
+/* 📩 HANDLE */
+function handle(m) {
+  if (m.type === "msg") renderMsg(m);
+  if (m.type === "fire") updateFire(m.count);
+}
+
+/* 🧱 RENDER */
+function renderMsg(m) {
+  const el = document.createElement("div");
+  el.className = "msg " + (m.me ? "me" : "");
+  el.innerText = m.text;
+
+  const box = document.getElementById("messages");
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+/* 🔥 STREAK */
+function updateFire(count) {
+  const f = document.getElementById("fire");
+  f.innerText = count > 1 ? "🔥 " + count : "";
+    }
